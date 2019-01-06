@@ -14,7 +14,7 @@ import voluptuous as vol
 from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
 from homeassistant.const import (
     CONF_HEADERS, CONF_NAME, CONF_RESOURCE, CONF_TIMEOUT, CONF_METHOD,
-    CONF_USERNAME, CONF_PASSWORD)
+    CONF_USERNAME, CONF_PASSWORD, HTTP_OK)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
@@ -23,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_BODY_OFF = 'body_off'
 CONF_BODY_ON = 'body_on'
 CONF_IS_ON_TEMPLATE = 'is_on_template'
+CONF_SUCCESS = 'success_code'
 
 DEFAULT_METHOD = 'post'
 DEFAULT_BODY_OFF = 'OFF'
@@ -42,6 +43,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
         vol.All(vol.Lower, vol.In(SUPPORT_REST_METHODS)),
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
     vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): cv.positive_int,
+    vol.Optional(CONF_SUCCESS, default=HTTP_OK): cv.positive_int,
     vol.Inclusive(CONF_USERNAME, 'authentication'): cv.string,
     vol.Inclusive(CONF_PASSWORD, 'authentication'): cv.string,
 })
@@ -53,6 +55,7 @@ async def async_setup_platform(hass, config, async_add_entities,
     body_off = config.get(CONF_BODY_OFF)
     body_on = config.get(CONF_BODY_ON)
     is_on_template = config.get(CONF_IS_ON_TEMPLATE)
+    success_code = config.get(CONF_SUCCESS)
     method = config.get(CONF_METHOD)
     headers = config.get(CONF_HEADERS)
     name = config.get(CONF_NAME)
@@ -74,7 +77,7 @@ async def async_setup_platform(hass, config, async_add_entities,
 
     try:
         switch = RestSwitch(name, resource, method, headers, auth, body_on,
-                            body_off, is_on_template, timeout)
+                            body_off, is_on_template, timeout, success_code)
 
         req = await switch.get_device_state(hass)
         if req.status >= 400:
@@ -92,7 +95,7 @@ class RestSwitch(SwitchDevice):
     """Representation of a switch that can be toggled using REST."""
 
     def __init__(self, name, resource, method, headers, auth, body_on,
-                 body_off, is_on_template, timeout):
+                 body_off, is_on_template, timeout, success_code):
         """Initialize the REST switch."""
         self._state = None
         self._name = name
@@ -104,6 +107,7 @@ class RestSwitch(SwitchDevice):
         self._body_off = body_off
         self._is_on_template = is_on_template
         self._timeout = timeout
+        self._success_code = success_code
 
     @property
     def name(self):
@@ -122,7 +126,7 @@ class RestSwitch(SwitchDevice):
         try:
             req = await self.set_device_state(body_on_t)
 
-            if req.status == 200:
+            if req.status == self._success_code:
                 self._state = True
             else:
                 _LOGGER.error(
@@ -137,7 +141,7 @@ class RestSwitch(SwitchDevice):
 
         try:
             req = await self.set_device_state(body_off_t)
-            if req.status == 200:
+            if req.status == self._success_code:
                 self._state = False
             else:
                 _LOGGER.error(

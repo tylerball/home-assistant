@@ -106,7 +106,7 @@ class TestRestSwitch:
         self.body_off = Template('off', self.hass)
         self.switch = rest.RestSwitch(
             self.name, self.resource, self.method, self.headers, self.auth,
-            self.body_on, self.body_off, None, 10)
+            self.body_on, self.body_off, None, 10, 200)
         self.switch.hass = self.hass
 
     def teardown_method(self):
@@ -124,6 +124,19 @@ class TestRestSwitch:
     def test_turn_on_success(self, aioclient_mock):
         """Test turn_on."""
         aioclient_mock.post(self.resource, status=200)
+        run_coroutine_threadsafe(
+            self.switch.async_turn_on(), self.hass.loop).result()
+
+        assert self.body_on.template == \
+            aioclient_mock.mock_calls[-1][2].decode()
+        assert self.switch.is_on
+
+    def test_turn_on_success_with_non_default_success(self, aioclient_mock):
+        """Test turn_on with a configured success status code."""
+        self.switch = rest.RestSwitch(
+            self.name, self.resource, self.method, self.headers, self.auth,
+            self.body_on, self.body_off, None, 10, 204)
+        aioclient_mock.post(self.resource, status=204)
         run_coroutine_threadsafe(
             self.switch.async_turn_on(), self.hass.loop).result()
 
